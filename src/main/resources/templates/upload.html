@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+    <script src="//code.jquery.com/jquery-1.9.1.min.js"></script>
+    <script src="//code.jquery.com/ui/1.9.2/jquery-ui.js"></script>
+    <script type="text/javascript" src="/js/plupload.full.min.js"></script>
+    <script type="text/javascript" src="/js/jquery.ui.plupload/jquery.ui.plupload.min.js" charset="UTF-8"></script>
+    <link href="/css/style.css" rel="stylesheet" type="text/css" />
+    
+</head>
+
+<body>
+ 
+<div id="container">
+    <a id="pickfiles" href="javascript:;">[Seleciona arquivos]</a>
+    <a id="uploadfiles" href="javascript:;">[Iniciar Upload]</a>
+    <a href="/logout"> | Logout</a>
+</div>
+
+<br />
+
+<div id="filelist">
+	<div id="divTable" class="divTable" style="width: 100%; border: 1px solid #000;">
+		<div id="divTableBody" class="divTableBody">
+			<div id="divTableRow" class="divTableRow">
+				<div class="divTableCell">Arquivo</div>
+				<div class="divTableCell">Usuario</div>
+				<div class="divTableCell">Tamanho</div>
+				<div class="divTableCell">Partes</div>
+				<div class="divTableCell">Tempo</div>
+				<div class="divTableCell">Status</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+
+<script type="text/javascript">
+/*<![CDATA[*/
+	
+$.ajax({
+		type: 'GET',
+	  	dataType: 'json',
+	  	url: "/api/list",
+	  	success: function (data) {
+	  		$.each(data, function(index, item) {
+	  			if ($('div[filename="'+item.fileName+'"]').length > 0)
+	  	          	$('div[filename="'+item.fileName+'"]').remove();
+	  			
+	  			var divStatus = null;
+	  			var divLink = ' <div id="name" class="divTableCell">'+item.fileName+'</div>';
+	  			
+	  			if (item.status == "Concluido")
+	  			{
+	  				divStatus = ' <div id="status" style="color:green;" class="divTableCell">'+item.descStatus+'</div>';
+	  				divLink = ' <div id="name" class="divTableCell"><a href="/api/download/'+item.fileName+'">'+item.fileName+'</a></div>';
+	  			}
+	  			else if (item.status == "Andamento")
+	  				divStatus = '	<div id="status" style="color:blue;" class="divTableCell">'+item.descStatus+'</div>';
+	  			else if (item.status == "Erro")
+	  				divStatus = '	<div id="status" style="color:red;" class="divTableCell">'+item.descStatus+'</div>';
+	  			
+	  	        document.getElementById('divTableBody').innerHTML += 
+	  	              ('<div filename="' + item.fileName + '" class="divTableRow">' +
+	  	               divLink +
+	  	               '	<div id="user" class="divTableCell">'+item.idUser+'</div>' +
+	  	               '	<div id="size" class="divTableCell">'+item.sizeFormated+'</div>' +
+	  	               '	<div id="chunks" class="divTableCell">'+item.chunks+'</div>' +
+	  	               '	<div id="time" class="divTableCell">'+msToHMS(item.timeSend)+'</div>' +
+	  	               divStatus +
+	  	  			 '</div>');
+	  		});
+	  	}
+});
+
+
+function msToHMS( ms ) {
+	var pad = "00";
+    // 1- Convert to seconds:
+    var seconds = ms / 1000;
+    // 2- Extract hours:
+    var hours = parseInt( seconds / 3600 ); // 3,600 seconds in 1 hour
+    seconds = seconds % 3600; // seconds remaining after extracting hours
+    hours = (pad + hours).slice(-pad.length);
+    // 3- Extract minutes:
+    var minutes = parseInt( seconds / 60 ); // 60 seconds in 1 minute
+    minutes = (pad + minutes).slice(-pad.length);
+    // 4- Keep only seconds not extracted to minutes:
+    seconds = seconds % 60;
+    
+    if(seconds < 10){
+    	seconds = ("0"+seconds);
+    }
+    
+    return hours+":"+minutes+":"+seconds;
+}
+
+
+var uploader = new plupload.Uploader({
+    
+	runtimes : 'html5,html4',
+    url : "/api/upload",
+    
+    browse_button : 'pickfiles',
+    container: document.getElementById('container'), 
+    
+    //Tamanho maximo de um arquivo
+    max_file_size : '2000mb',
+
+    //Tamanho das partes quando fragmentar arquivo
+    chunk_size: '1mb',
+
+    multipart_params : {
+        "startTime" : 0,
+        "sizeFile"  : ""
+    },
+    
+    init: {
+        PostInit: function() {
+            document.getElementById('uploadfiles').onclick = function() {
+                uploader.start();
+                return false;
+            };
+        },
+ 
+        FilesAdded: function(up, files) {
+            plupload.each(files, function(file) {
+                if ($('div[filename="'+file.name+'"]').length > 0)
+                	$('div[filename="'+file.name+'"]').remove();
+                document.getElementById('divTableBody').innerHTML += 
+                 ('<div id="' + file.id + '" filename="' + file.name + '" class="divTableRow">' +
+                  '	<div id="name" class="divTableCell">'+file.name+'</div>' +
+                  '	<div id="user" class="divTableCell"></div>' +
+                  '	<div id="size" class="divTableCell">'+plupload.formatSize(file.size)+'</div>' +
+                  '	<div id="chunks" class="divTableCell"></div>' +
+                  '	<div id="time" class="divTableCell">--:--:--</div>' +
+                  '	<div id="status" style="color:orange;" class="divTableCell">Pendente envio</div>' +
+     			 '</div>');
+            });
+        },
+ 
+        BeforeUpload: function(up, file) {
+        	params = up.settings.multipart_params;
+        	params.startTime = new Date().getTime();
+        	params.sizeFile = plupload.formatSize(file.size)
+        },
+        
+        UploadProgress: function(up, file) {
+            document.getElementById(file.id).getElementsByTagName("div")[5].innerHTML = '<span style="color:blue;">Em andamento... ' + file.percent + '%</span>';
+        },
+ 
+        FileUploaded: function(up, file, info) {
+        	document.getElementById(file.id).getElementsByTagName("div")[5].innerHTML = '<span style="color:green;">'+info.response+'!</span>';
+        	$.ajax({
+        		type: 'GET',
+        	  	dataType: 'json',
+        	  	url: "/api/fileInfo?fileName="+file.name,
+        	  	success: function (data) {
+        	  		$('#'+file.id).find("#name").html('<a href="/api/download/'+data.fileName+'">'+data.fileName+'</a>');
+        	  		$('#'+file.id).find("#user").text(data.idUser);
+        	  		$('#'+file.id).find("#chunks").text(data.chunks);
+        	  		$('#'+file.id).find("#time").text(msToHMS(data.timeSend));
+        	  	}
+        	});
+        },
+        
+        Error: function(up, error) {
+        	document.getElementById(error.file.id).getElementsByTagName("div")[5].innerHTML = '<span style="color:red;">Erro: ' + error.response +'!</span>';
+        	$.ajax({
+        		type: 'GET',
+        	  	dataType: 'json',
+        	  	url: "/api/fileInfo?fileName="+error.file.name,
+        	  	success: function (data) {
+        	  		$('#'+error.file.id).find("#user").text(data.idUser);
+        	  		$('#'+error.file.id).find("#chunks").text(data.chunks);
+        	  		$('#'+error.file.id).find("#time").text(msToHMS(data.timeSend));
+        	  	}
+        	});
+        }
+    }
+});
+        
+uploader.init();
+
+/*]]>*/
+</script>
+
+</body>
+</html>
